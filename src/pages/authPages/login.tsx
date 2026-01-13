@@ -13,8 +13,10 @@ import type{RootState} from '../../redux/store'
 import { useNavigate } from "react-router";
 import { useState } from 'react';
 import {  signInWithEmailAndPassword   } from 'firebase/auth';
-import { auth, googleProvider } from '../../firebase/firebase';  
+import { auth, googleProvider ,db} from '../../firebase/firebase';  
 import { signInWithPopup } from 'firebase/auth';
+import { collection, addDoc, serverTimestamp,getDocs , query,where } from "firebase/firestore";
+
 
 
 
@@ -23,7 +25,6 @@ import { signInWithPopup } from 'firebase/auth';
 function Login() {
   let navigate = useNavigate();
   const {enqueueSnackbar} = useSnackbar()
-  const Users = useSelector((state:RootState)=>state.auth.users)
    const [showPassword, setShowPassword] = useState(false);
   // console.log(users);
   const dispatch = useDispatch()
@@ -84,19 +85,43 @@ const onSubmit = (user:loginInterface)=>{
         });
   
 }
-const signInWithGoogle = async () => {
-  try {
-    const response =  await signInWithPopup(auth, googleProvider);
-    dispatch(handleCurrentUser(response?.user))
-    navigate('/Dashboard')
-    
-    
-  } catch (error) {
-    console.error('Error signing in with Google', error);
-  }
-};
+  const signInWithGoogle = async () => {
+    try {
+      const response = await signInWithPopup(auth, googleProvider);
+      const firebaseUser = response.user;
+      const existingQuery = query(
+      collection(db, "users"),
+      where("email", "==", firebaseUser.email)
+    );
+     const existed = await getDocs(existingQuery);
 
-console.log(Users)
+      if (!existed) {
+      await addDoc(collection(db, "users"), {
+        id: firebaseUser.uid,
+        userName: firebaseUser.displayName || null,
+        email: firebaseUser.email,
+        photoUrl: firebaseUser.photoURL,
+        provider: "google",
+        createdAt: serverTimestamp(),
+      });}
+
+      dispatch(
+        handleCurrentUser({
+          id: firebaseUser.uid,
+          userName: firebaseUser.displayName || null,
+          email: firebaseUser.email,
+          photoUrl: firebaseUser.photoURL,
+        })
+      );
+
+      navigate("/Dashboard");
+      enqueueSnackbar("Signed in with Google!", { autoHideDuration: 3000 });
+    } catch (error: any) {
+      console.error("Google Sign-in Error:", error);
+      enqueueSnackbar(error.message, { autoHideDuration: 3000 });
+    }
+  };
+
   return (
     <>
       <Box

@@ -1,10 +1,10 @@
 import {useSelector} from "react-redux"
  import {Navigate, useLocation} from "react-router"
  import type{RootState} from '../redux/store'
-import { ReactNode } from "react";
+import { ReactElement } from "react";
 
 
- const ProtectedRoute = ({children} : {children: ReactNode}) => {
+ const ProtectedRoute = ({children} : {children: ReactElement}) => {
 
      let location = useLocation();
      const user = useSelector((state:RootState) => state.auth.currentUser);

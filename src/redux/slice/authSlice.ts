@@ -1,20 +1,15 @@
 import { createSlice } from '@reduxjs/toolkit'
 
 type initialType={
-    users:{
-      id:number,
-        userName:string,
-        email:string,
-    }[],
     currentUser:{
-      id:number,
+      id:string,
         userName:string,
         email:string,
+        photoUrl:string
     }|null
 }
 
 const initialState:initialType = {
-    users: [],
     currentUser: null,
 }
 
@@ -22,11 +17,11 @@ const authSlice = createSlice({
   name: 'auth',
   initialState: initialState,
   reducers: {
-    handleRegister(state,action){
-        state.users.push(
-        action.payload
-        )
-    },
+    // handleRegister(state,action){
+    //     state.users.push(
+    //     action.payload
+    //     )
+    // },
     handleCurrentUser (state,action){
         state.currentUser = action.payload
 
@@ -40,5 +35,5 @@ const authSlice = createSlice({
   },
 )
 
-export const { handleRegister,handleCurrentUser,handleLogout }  = authSlice.actions
+export const { handleCurrentUser,handleLogout }  = authSlice.actions
 export default authSlice.reducer

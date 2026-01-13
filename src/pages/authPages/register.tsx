@@ -1,151 +1,165 @@
-import { useForm, Controller } from 'react-hook-form'; 
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Box, TextField, Button, Typography, Paper ,InputAdornment,IconButton} from '@mui/material';
-import * as z from 'zod';
-import {  Link as RouterLink } from "react-router";
-import Link from '@mui/material/Link'; 
-import { useSnackbar } from 'notistack';
-import { useSelector, useDispatch } from 'react-redux'
-import type{RootState} from '../../redux/store'
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import {Box,TextField,Button,Typography,Paper,InputAdornment,IconButton} from "@mui/material";
+import * as z from "zod";
+import { Link as RouterLink } from "react-router";
+import Link from "@mui/material/Link";
+import { useSnackbar } from "notistack";
+import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router";
-import {  createUserWithEmailAndPassword  } from 'firebase/auth';
-import { auth, googleProvider,db } from '../../firebase/firebase';  
-import { signInWithPopup } from 'firebase/auth';
-import {handleCurrentUser,handleRegister} from "../../redux/slice/authSlice"
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import Visibility from '@mui/icons-material/Visibility';
-import VisibilityOff from '@mui/icons-material/VisibilityOff';
-import { useState } from 'react';
-
-
-
-
-
+import {createUserWithEmailAndPassword,signInWithPopup,} from "firebase/auth";
+import { auth, googleProvider, db } from "../../firebase/firebase";
+import { handleCurrentUser } from "../../redux/slice/authSlice";
+import { collection, addDoc, serverTimestamp,getDocs , query,where } from "firebase/firestore";
+import Visibility from "@mui/icons-material/Visibility";
+import VisibilityOff from "@mui/icons-material/VisibilityOff";
+import { useState } from "react";
 
 function Register() {
-  let navigate = useNavigate();
-  const {enqueueSnackbar} = useSnackbar()
+  const navigate = useNavigate();
+  const { enqueueSnackbar } = useSnackbar();
+  const dispatch = useDispatch();
   const [showPassword, setShowPassword] = useState(false);
-  
-//   console.log(users);
-  const dispatch = useDispatch()
-  const singupschema = z.object({
-    userName: z
+
+  const signupSchema = z.object({
+    userName: z.string().min(1, "User Name is required"),
+    email: z
       .string()
-      .min(1, 'User Name is required'),
-    email:z
-    .string()
-    .min(1, { message: "This field has to be filled." })
-    .email("This is not a valid email."),
+      .min(1, { message: "Email is required." })
+      .email("Invalid email address."),
     password: z
       .string()
       .trim()
-      .min(1, 'Password is required')
-      .min(6, 'Password must be at least 6 characters'),
+      .min(6, "Password must be at least 6 characters"),
   });
-  type loginInterface = z.z.infer<typeof singupschema>
+
+  type SignupForm = z.infer<typeof signupSchema>;
 
   const {
-    control, 
+    control,
     handleSubmit,
     formState: { errors },
-  } = useForm<loginInterface>({
-    resolver: zodResolver(singupschema),
+  } = useForm<SignupForm>({
+    resolver: zodResolver(signupSchema),
     defaultValues: {
-      userName: '',
-      email:'',
-      password: '',
-
+      userName: "",
+      email: "",
+      password: "",
     },
   });
 
-const onSubmit = async (user:loginInterface)=>{
+  const onSubmit = async (user: SignupForm) => {
+    try {
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        user.email,
+        user.password
+      );
 
-    // console.log(user)
-    // const existing = Users.find((i)=>i.userName==user.userName || i.email == user.email)
-    // if(existing){
-    //        enqueueSnackbar('Account with same Email or user Name already exists', {autoHideDuration: 3000})
-    // }else{
-    //     dispatch(handleRegister(user))
-    //     navigate('/')
-    // }
-    await createUserWithEmailAndPassword(auth, user.email, user.password)
-        .then((userCredential) => {
-            // Signed in
-            const User = userCredential.user;
-            const user={
-      id:Date.now(),
-      uerName : User.displayName||null,
-      email : User.email,
-      photoUrl:User.photoURL
+      const firebaseUser = userCredential.user;
 
+      // Save user to Firestore
+      await addDoc(collection(db, "users"), {
+        id: firebaseUser.uid,
+        userName: user.userName,
+        email: firebaseUser.email,
+        photoUrl: firebaseUser.photoURL || null,
+        provider: "email",
+        createdAt: serverTimestamp(),
+      });
 
-    }
-    dispatch(handleRegister(user))
-    dispatch(handleCurrentUser(user))
-            console.log(user);
-            enqueueSnackbar('Register Successfully', {autoHideDuration: 3000})
-            navigate("/")
+      dispatch(
+        handleCurrentUser({
+          id: String(firebaseUser.uid),
+          userName: user.userName,
+          email: firebaseUser.email,
+          photoUrl: firebaseUser.photoURL,
         })
-        .catch((error) => {
-            const errorCode = error.code;
-            const errorMessage = error.message;
-            console.log(errorCode, errorMessage);
-            enqueueSnackbar(errorMessage, {autoHideDuration: 3000})
-        });
-}
+      );
 
-const signInWithGoogle = async () => {
-  try {
-    const response =  await signInWithPopup(auth, googleProvider);
-    const user={
-      id:Date.now(),
-      uerName : response.user.displayName||null,
-      email : response.user.email,
-      photoUrl:response.user.photoURL
-
-
+      enqueueSnackbar("Registered Successfully!", { autoHideDuration: 3000 });
+      navigate("/");
+    } catch (error: any) {
+      console.error(error);
+      enqueueSnackbar(error.message, { autoHideDuration: 3000 });
     }
-    console.log("sending data",user)
-    console.log("getting data",response.user)
-    dispatch(handleRegister(user))
-    dispatch(handleCurrentUser(user))
-    navigate('/Dashboard')
-    console.log(response.user)
-    
-    
-  } catch (error) {
-    console.error('Error signing in with Google', error);
-  }
-};
+  };
 
+  const signInWithGoogle = async () => {
+    try {
+      const response = await signInWithPopup(auth, googleProvider);
+      const firebaseUser = response.user;
+      const existingQuery = query(
+      collection(db, "users"),
+      where("email", "==", firebaseUser.email)
+    );
+     const existed = await getDocs(existingQuery);
+
+      if (!existed) {
+      await addDoc(collection(db, "users"), {
+        id: firebaseUser.uid,
+        userName: firebaseUser.displayName || null,
+        email: firebaseUser.email,
+        photoUrl: firebaseUser.photoURL,
+        provider: "google",
+        createdAt: serverTimestamp(),
+      });}
+
+      dispatch(
+        handleCurrentUser({
+          id: firebaseUser.uid,
+          userName: firebaseUser.displayName || null,
+          email: firebaseUser.email,
+          photoUrl: firebaseUser.photoURL,
+        })
+      );
+
+      navigate("/Dashboard");
+      enqueueSnackbar("Signed in with Google!", { autoHideDuration: 3000 });
+    } catch (error: any) {
+      console.error("Google Sign-in Error:", error);
+      enqueueSnackbar(error.message, { autoHideDuration: 3000 });
+    }
+  };
 
   return (
     <>
       <Box
         sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '100vh',
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          minHeight: "100vh",
         }}
       >
-        <Paper elevation={3} sx={{ p: 4, width: '100%', maxWidth: 400,
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          flexDirection: 'column',
-          boxShadow:'2'
-        }}>
-          <img src='https://freepngimg.com/thumb/logo/69662-instagram-media-brand-social-logo-photography.png' alt="Company Logo" width="300" height="150"/>
+        <Paper
+          elevation={3}
+          sx={{
+            p: 4,
+            width: "100%",
+            maxWidth: 400,
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            flexDirection: "column",
+            boxShadow: "2",
+          }}
+        >
+          <img
+            src="https://freepngimg.com/thumb/logo/69662-instagram-media-brand-social-logo-photography.png"
+            alt="Company Logo"
+            width="300"
+            height="150"
+          />
+
           <form onSubmit={handleSubmit(onSubmit)}>
             <Controller
               name="userName"
               control={control}
               render={({ field }) => (
                 <TextField
-                  {...field} 
-                  label="User Name "
+                  {...field}
+                  label="User Name"
                   variant="filled"
                   fullWidth
                   error={!!errors.userName}
@@ -154,12 +168,13 @@ const signInWithGoogle = async () => {
                 />
               )}
             />
+
             <Controller
               name="email"
               control={control}
               render={({ field }) => (
                 <TextField
-                  {...field} 
+                  {...field}
                   label="Email"
                   variant="filled"
                   fullWidth
@@ -171,56 +186,63 @@ const signInWithGoogle = async () => {
             />
 
             <Controller
-               name="password"
-               control={control}
-               render={({ field }) => (
-               <TextField
-                {...field}
-                 label="Password"
-                  type={showPassword ? 'text' : 'password'}
+              name="password"
+              control={control}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  label="Password"
+                  type={showPassword ? "text" : "password"}
                   variant="filled"
                   fullWidth
                   error={!!errors.password}
                   helperText={errors.password?.message}
-                  sx={{ mb: 2,width: 400 }}
+                  sx={{ mb: 2, width: 400 }}
                   InputProps={{
-                   endAdornment: (
-                 <InputAdornment position="end">
-                 <IconButton
-                  onClick={() => setShowPassword((prev) => !prev)}
-                    edge="end"
-                     >
-                      {showPassword ? <VisibilityOff /> : <Visibility />}
-                      </IconButton>
-                     </InputAdornment>
-                       )
-                      }}
-                     />
-                   )}
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          onClick={() => setShowPassword((prev) => !prev)}
+                          edge="end"
+                        >
+                          {showPassword ? <VisibilityOff /> : <Visibility />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
                 />
+              )}
+            />
 
-
-            <Button
-              type="submit"
-              variant="contained"
-              size="large"
-              fullWidth
-              sx={{ mt: 2 }}
-            >
-              signup
+            <Button type="submit" variant="contained" fullWidth sx={{ mt: 2 }}>
+              Sign Up
             </Button>
+
             <Button
               onClick={signInWithGoogle}
               variant="contained"
-              size="large"
               fullWidth
               sx={{ mt: 2 }}
             >
               Sign in with Google
             </Button>
           </form>
-          <Typography variant="h4" component="h2"  fontSize="15px" sx={{ fontStyle: 'italic' ,m:4 }} >
-            Already have accout<Link component={RouterLink} to="/" underline="hover" sx={{ marginLeft: '5px' }} >login</Link>
+
+          <Typography
+            variant="h4"
+            component="h2"
+            fontSize="15px"
+            sx={{ fontStyle: "italic", m: 4 }}
+          >
+            Already have an account?
+            <Link
+              component={RouterLink}
+              to="/"
+              underline="hover"
+              sx={{ marginLeft: "5px" }}
+            >
+              Login
+            </Link>
           </Typography>
         </Paper>
       </Box>
@@ -228,4 +250,4 @@ const signInWithGoogle = async () => {
   );
 }
 
-export default Register
+export default Register;

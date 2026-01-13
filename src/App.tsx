@@ -5,7 +5,7 @@ import Login from "./pages/authPages/login";
 import Register from "./pages/authPages/register";
 import Dashboard from "./pages/dashboardPage/dashboard";
 // import ViewPage from "./pages/viewPage/viewPage"
-// import ProtectedRoute from "./Routes/protectedRoute";
+import ProtectedRoute from "./Routes/protectedRoute";
 
 function App() {
   return (
@@ -16,8 +16,9 @@ function App() {
         <Route
           path="/Dashboard"
           element={
-            // <ProtectedRoute>
+            <ProtectedRoute>
               <Dashboard />
+              </ProtectedRoute>
 
           }
         />
