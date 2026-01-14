@@ -1,16 +1,16 @@
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import {Box,TextField,Button,Typography,Paper,InputAdornment,IconButton} from "@mui/material";
+import { Box, TextField, Button, Typography, Paper, InputAdornment, IconButton } from "@mui/material";
 import * as z from "zod";
 import { Link as RouterLink } from "react-router";
 import Link from "@mui/material/Link";
 import { useSnackbar } from "notistack";
 import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router";
-import {createUserWithEmailAndPassword,signInWithPopup,} from "firebase/auth";
+import { createUserWithEmailAndPassword, signInWithPopup, } from "firebase/auth";
 import { auth, googleProvider, db } from "../../firebase/firebase";
 import { handleCurrentUser } from "../../redux/slice/authSlice";
-import { collection, addDoc, serverTimestamp,getDocs , query,where } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, getDocs, query, where, doc, setDoc, updateDoc } from "firebase/firestore";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import { useState } from "react";
@@ -56,10 +56,12 @@ function Register() {
         user.password
       );
 
+
       const firebaseUser = userCredential.user;
+      console.log(firebaseUser)
 
       // Save user to Firestore
-      await addDoc(collection(db, "users"), {
+      await setDoc(doc(db, "users", firebaseUser.uid), {
         id: firebaseUser.uid,
         userName: user.userName,
         email: firebaseUser.email,
@@ -89,21 +91,33 @@ function Register() {
     try {
       const response = await signInWithPopup(auth, googleProvider);
       const firebaseUser = response.user;
+      console.log(firebaseUser)
       const existingQuery = query(
-      collection(db, "users"),
-      where("email", "==", firebaseUser.email)
-    );
-     const existed = await getDocs(existingQuery);
+        collection(db, "users"),
+        where("email", "==", firebaseUser.email)
+      );
+      const existed = await getDocs(existingQuery);
+      console.log(existed)
 
       if (!existed) {
-      await addDoc(collection(db, "users"), {
-        id: firebaseUser.uid,
-        userName: firebaseUser.displayName || null,
-        email: firebaseUser.email,
-        photoUrl: firebaseUser.photoURL,
-        provider: "google",
-        createdAt: serverTimestamp(),
-      });}
+        await setDoc(doc(db, "users", firebaseUser.uid), {
+          id: firebaseUser.uid,
+          userName: firebaseUser.displayName || null,
+          email: firebaseUser.email,
+          photoUrl: firebaseUser.photoURL,
+          provider: "google",
+          createdAt: serverTimestamp(),
+          isOnline: true
+        });
+
+      }
+      if (existed) {
+        const docRef = doc(collection(db, "users", firebaseUser.uid))
+        console.log("docref", docRef)
+        await updateDoc(docRef, {
+          isOnline: true
+        })
+      }
 
       dispatch(
         handleCurrentUser({

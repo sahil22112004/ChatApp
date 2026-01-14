@@ -1,53 +1,111 @@
-// src/firebase.js
-import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import React, { useEffect, useState, useRef } from 'react';
+import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db, auth } from '../firebase';
+import { Box, TextField, Button, Paper, Typography, List, ListItem, ListItemText } from '@mui/material';
+import { formatDistance } from 'date-fns';
 
-// Your Firebase configuration
-const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
-};
+const ChatRoom = ({ roomId }) => {
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+  const messagesEndRef = useRef(null);
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-// Initialize Firebase Authentication and get a reference to the service
-export const auth = getAuth(app);
-// Initialize Google Auth Provider
-export const provider = new GoogleAuthProvider();
+  useEffect(() => {
+    // Query messages for this room
+    const q = query(
+      collection(db, 'messages'),
+      orderBy('createdAt', 'asc'),
+      limit(100)
+    );
 
-export { signInWithPopup };
+    // Subscribe to real-time updates
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const newMessages :any = [];
+      snapshot.forEach((doc) => {
+        newMessages.push({ id: doc.id, ...doc.data() });
+      });
+      setMessages(newMessages);
+      scrollToBottom();
+    });
 
+    return () => unsubscribe();
+  }, [roomId]);
 
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
-// src/components/SignInButton.jsx
-import React from 'react';
-import { auth, provider, signInWithPopup } from '../firebase';
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!newMessage.trim()) return;
 
-const SignInButton = () => {
-  const signInWithGoogle = async () => {
     try {
-      // Sign in with Google using a popup window
-      const result = await signInWithPopup(auth, provider);
-      // The signed-in user info.
-      const user = result.user;
-      console.log("User signed in:", user);
+      await addDoc(collection(db, 'messages'), {
+        text: newMessage,
+        createdAt: serverTimestamp(),
+        userId: auth.currentUser.uid,
+        userName: auth.currentUser.displayName || 'Anonymous',
+        roomId
+      });
+
+      setNewMessage('');
     } catch (error) {
-      // Handle Errors here.
-      const errorCode = error.code;
-      const errorMessage = error.message;
-      console.error("Sign-in error:", errorMessage);
+      console.error('Error sending message:', error);
     }
   };
 
   return (
-    <button onClick={signInWithGoogle}>
-      Sign In with Google
-    </button>
+    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <Paper elevation={3} sx={{ flex: 1, overflow: 'auto', p: 2, mb: 2 }}>
+        <List>
+          {messages.map((message) => (
+            <ListItem
+              key={message.id}
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: message.userId === auth.currentUser?.uid ? 'flex-end' : 'flex-start'
+              }}
+            >
+              <Typography variant="caption" color="textSecondary">
+                {message.userName} • {
+                  message.createdAt && formatDistance(message.createdAt.toDate(), new Date(), { addSuffix: true })
+                }
+              </Typography>
+              <Paper
+                elevation={1}
+                sx={{
+                  p: 1,
+                  bgcolor: message.userId === auth.currentUser?.uid ? 'primary.light' : 'grey.100',
+                  maxWidth: '70%'
+                }}
+              >
+                <Typography>{message.text}</Typography>
+              </Paper>
+            </ListItem>
+          ))}
+          <div ref={messagesEndRef} />
+        </List>
+      </Paper>
+
+      <Box component="form" onSubmit={handleSubmit} sx={{ p: 2 }}>
+        <TextField
+          fullWidth
+          value={newMessage}
+          onChange={(e) => setNewMessage(e.target.value)}
+          placeholder="Type a message..."
+          variant="outlined"
+          sx={{ mr: 1 }}
+          InputProps={{
+            endAdornment: (
+              <Button type="submit" variant="contained" disabled={!newMessage.trim()}>
+                Send
+              </Button>
+            )
+          }}
+        />
+      </Box>
+    </Box>
   );
 };
 
-export default SignInButton;
+export default ChatRoom;

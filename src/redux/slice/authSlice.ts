@@ -2,7 +2,7 @@ import { createSlice } from '@reduxjs/toolkit'
 
 type initialType={
     currentUser:{
-      id:string,
+        id:string,
         userName:string,
         email:string,
         photoUrl:string
