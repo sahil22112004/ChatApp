@@ -97,9 +97,9 @@ function Register() {
         where("email", "==", firebaseUser.email)
       );
       const existed = await getDocs(existingQuery);
-      console.log(existed)
+      console.log("existed", existed)
 
-      if (!existed) {
+      if (existed.empty) {
         await setDoc(doc(db, "users", firebaseUser.uid), {
           id: firebaseUser.uid,
           userName: firebaseUser.displayName || null,
@@ -111,8 +111,8 @@ function Register() {
         });
 
       }
-      if (existed) {
-        const docRef = doc(collection(db, "users", firebaseUser.uid))
+      if (!existed.empty) {
+        const docRef = doc(db, "users", firebaseUser.uid)
         console.log("docref", docRef)
         await updateDoc(docRef, {
           isOnline: true

@@ -6,6 +6,7 @@ import Register from "./pages/authPages/register";
 import Dashboard from "./pages/dashboardPage/dashboard";
 // import ViewPage from "./pages/viewPage/viewPage"
 import ProtectedRoute from "./Routes/protectedRoute";
+import EditProfile from "./pages/editProfilePage/editProfile";
 
 function App() {
   return (
@@ -18,6 +19,15 @@ function App() {
           element={
             <ProtectedRoute>
               <Dashboard />
+              </ProtectedRoute>
+
+          }
+        />
+        <Route
+          path="/EditProfile"
+          element={
+            <ProtectedRoute>
+              <EditProfile />
               </ProtectedRoute>
 
           }

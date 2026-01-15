@@ -12,198 +12,210 @@ import TableContainer from "@mui/material/TableContainer";
 import TableRow from "@mui/material/TableRow";
 import Paper from "@mui/material/Paper";
 import { db, auth } from "../../firebase/firebase";
-import { collection, getDocs, addDoc, query, orderBy, onSnapshot, where, or, doc, updateDoc } from "firebase/firestore";
+import {collection, addDoc, query, orderBy, onSnapshot, doc, updateDoc, setDoc, getDocs, limit, startAfter} from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { useEffect, useState, useRef } from "react";
 import { handleCurrentUser } from "../../redux/slice/authSlice";
-import EmojiPicker, { EmojiClickData } from 'emoji-picker-react'
-import { array } from "zod";
+import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
+import { useNavigate } from "react-router";
 
 function Dashboard() {
   const currentUser = useSelector((state: RootState) => state.auth.currentUser);
   const dispatch = useDispatch();
   const [showPicker, setShowPicker] = useState<boolean>(false);
-  const [searchInput, setSearchInput] = useState<string>('')
+  const [searchInput, setSearchInput] = useState<string>("");
   const [users, setUsers] = useState<any[]>([]);
+  const [lastUserDoc, setLastUserDoc] = useState<any>(null);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const USERS_LIMIT = 10;
+
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [inputMsg, setInputMsg] = useState("");
   const [showProfileBox, setShowProfileBox] = useState(false);
-  const isSearching = searchInput.trim() === ""
+  const [isTyping, setIsTyping] = useState(false);
+  const navigate = useNavigate();
 
-  const getChatId = (id1: string, id2: string) => {
-    return id1 < id2 ? `${id1}_${id2}` : `${id2}_${id1}`;
+  const usersRefDiv = useRef<HTMLDivElement | null>(null);
+
+  const getChatId = (id1: string, id2: string) =>
+    id1 < id2 ? `${id1}_${id2}` : `${id2}_${id1}`;
+
+  // FIRST LOAD USERS
+  const loadInitialUsers = async () => {
+    if (!currentUser) return;
+    setUsersLoading(true);
+
+    const qUsers = query(
+      collection(db, "users"),
+      orderBy("userName"),
+      limit(USERS_LIMIT)
+    );
+
+    const snapshot = await getDocs(qUsers);
+    const list: any[] = [];
+
+    snapshot.forEach((d) => {
+      const data = d.data();
+      if (data.id !== currentUser.id) list.push(data);
+    });
+
+    setUsers(list);
+    setLastUserDoc(snapshot.docs[snapshot.docs.length - 1] || null);
+    setUsersLoading(false);
+  };
+
+  // LOAD MORE USERS ON SCROLL
+  const loadMoreUsers = async () => {
+    if (!currentUser || !lastUserDoc || usersLoading) return;
+    setUsersLoading(true);
+
+    const qMore = query(
+      collection(db, "users"),
+      orderBy("userName"),
+      startAfter(lastUserDoc),
+      limit(USERS_LIMIT)
+    );
+
+    const snapshot = await getDocs(qMore);
+    const list: any[] = [];
+
+    snapshot.forEach((d) => {
+      const data = d.data();
+      if (data.id !== currentUser.id) list.push(data);
+    });
+
+    setUsers((prev) => [...prev, ...list]);
+    setLastUserDoc(snapshot.docs[snapshot.docs.length - 1] || null);
+    setUsersLoading(false);
   };
 
   useEffect(() => {
-    if (!currentUser) return;
-    if (isSearching) return;
-
-    const fetchUsers = async () => {
-      const Users = await getDocs(collection(db, "users"));
-      const userList: any[] = [];
-
-      Users.forEach((doc) => {
-        const data = doc.data();
-        userList.push({ docId: doc.id, ...data });
-      });
-
-      const filteredUsers = userList.filter((u) => u.id !== currentUser.id);
-      setUsers(filteredUsers);
-    };
-
-    fetchUsers();
+    loadInitialUsers();
   }, [currentUser]);
 
   useEffect(() => {
     if (!currentUser) return;
-    const isSearching = searchInput.trim() === ""
 
-    const fetchUsers = async () => {
-      const Users = await getDocs(collection(db, "users"));
-      const userList: any[] = [];
+    const unsub = onSnapshot(collection(db, "users"), (snapshot) => {
+      const all: any[] = [];
+      snapshot.forEach((doc) => all.push(doc.data()));
 
-      Users.forEach((doc) => {
-        const data = doc.data();
-        userList.push({ docId: doc.id, ...data });
-      });
+      const filtered = all.filter((u) => u.id !== currentUser.id);
+      const search = searchInput.toLowerCase();
 
-      const searchUser = userList.filter((u) => (u.userName || u.email).toLowerCase().includes(searchInput.toLowerCase()));
-      const filteredUsers = searchUser.filter((u) => u.id !== currentUser.id);
-      setUsers(filteredUsers);
-    };
+      setUsers(
+        filtered.filter((u) =>
+          (u.userName || u.email)?.toLowerCase().includes(search)
+        )
+      );
+    });
 
-    fetchUsers();
-  }, [searchInput]);
+    return () => unsub();
+  }, [currentUser, searchInput]);
 
+  const handleScrollUsers = () => {
+    const div = usersRefDiv.current;
+    if (!div) return;
 
+    if (div.scrollTop + div.clientHeight >= div.scrollHeight - 5) {
+      loadMoreUsers();
+    }
+  };
 
-
-
-
-
-
-
-  //  useEffect(() => {
-  //   // Query messages for this room
-  //   // const q = query(
-  //   //   collection(db, 'messages'),
-  //   //   orderBy('createdAt', 'asc'),
-  //   //   limit(100)
-  //   // );
-  //   const getMsgInOrder = query(collection(db, "chats", chatId, "messages"),
-  //     orderBy("timestamp", "asc")
-  //   );
-
-
-  //   // Subscribe to real-time updates
-  //   const unsubscribe = onSnapshot(getMsgInOrder, (snapshot) => {
-  //     const newMessages :any = []
-  //     snapshot.forEach((doc) => {
-  //       newMessages.push({ id: doc.id, ...doc.data() });
-  //     });
-  //     setMessages(newMessages);
-  //     // scrollToBottom();
-  //   });
-
-  //   return () => unsubscribe();
-  // }, [chatId]);
-
-  // const scrollToBottom = () => {
-  //   messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  // };
-
-  const loadMessages = async (receiver: any) => {
+  const loadMessages = (receiver: any) => {
     if (!currentUser) return;
-
     setSelectedUser(receiver);
 
     const chatId = getChatId(currentUser.id, receiver.id);
-    const getMsgInOrder = query(collection(db, "chats", chatId, "messages"),
+    const qMsg = query(
+      collection(db, "chats", chatId, "messages"),
       orderBy("timestamp", "asc")
     );
 
-    const unsubscribe = onSnapshot(getMsgInOrder, (snapshot) => {
-      const newMessages: any = [];
-      snapshot.forEach((doc) => {
-        newMessages.push({ id: doc.id, ...doc.data() });
-      });
-      setMessages(newMessages);
+    const unsubMsg = onSnapshot(qMsg, (snapshot) => {
+      const msgs: any[] = [];
+      snapshot.forEach((doc) => msgs.push({ id: doc.id, ...doc.data() }));
+      setMessages(msgs);
     });
 
+    const unsubTyping = onSnapshot(
+      doc(db, "chats", chatId, "typing", receiver.id),
+      (snap) => {
+        if (snap.exists()) setIsTyping(snap.data().typing === true);
+        else setIsTyping(false);
+      }
+    );
 
-
-
-    // const getMsgInOrder = query(collection(db, "chats", chatId, "messages"),
-    //   orderBy("timestamp", "asc")
-    // );
-    //  const unsubscribe = onSnapshot(getMsgInOrder, (snapshot) => {
-    //   const newMessages: any[] = [];
-    //   snapshot.forEach((doc) => {
-    //     newMessages.push({ id: doc.id, ...doc.data() });
-    //   });
-    //   setMessages(newMessages);
-    //   scrollToBottom();
-    // });
-
-
-    // const messages = await getDocs(getMsgInOrder);
-    // const msgList: any[] = [];
-    // messages.forEach((doc) => msgList.push(doc.data()));
-
-    // setMessages(msgList);
-    return unsubscribe
-
-
+    return () => {
+      unsubMsg();
+      unsubTyping();
+    };
   };
+  
 
-
-
-  const sendMessage = async () => {
-    if (!inputMsg.trim() || !selectedUser || !currentUser) return;
+  const handleTyping = async () => {
+    if (!currentUser || !selectedUser) return;
 
     const chatId = getChatId(currentUser.id, selectedUser.id);
 
-    const newMsg = {
+    await updateDoc(doc(db, "chats", chatId, "typing", currentUser.id), {
+      typing: true,
+    }).catch(async () => {
+      await setDoc(doc(db, "chats", chatId, "typing", currentUser.id), {
+        typing: true,
+      });
+    });
+
+    clearTimeout((window as any).typingTimeout);
+    (window as any).typingTimeout = setTimeout(async () => {
+      await updateDoc(doc(db, "chats", chatId, "typing", currentUser.id), {
+        typing: false,
+      }).catch(async () => {
+        await setDoc(doc(db, "chats", chatId, "typing", currentUser.id), {
+          typing: false,
+        });
+      });
+    }, 2000);
+  };
+
+  const sendMessage = async () => {
+    if (!inputMsg.trim() || !selectedUser || !currentUser) return;
+    const chatId = getChatId(currentUser.id, selectedUser.id);
+
+    await addDoc(collection(db, "chats", chatId, "messages"), {
       text: inputMsg,
       sender: currentUser.id,
       receiver: selectedUser.id,
       timestamp: new Date(),
-    };
+    });
 
-    await addDoc(collection(db, "chats", chatId, "messages"), newMsg);
+    await updateDoc(doc(db, "chats", chatId, "typing", currentUser.id), {
+      typing: false,
+    }).catch(() => {});
 
     setInputMsg("");
-
-    setTimeout(() => {
-      const chat = document.querySelector(".chat-messages");
-      if (chat) chat.scrollTop = chat.scrollHeight;
-    }, 200);
   };
 
   const handleLogout = async () => {
-    await signOut(auth);
     if (currentUser) {
-      const docRef = doc(db, "users", currentUser?.id)
-      console.log("docref", docRef)
-      await updateDoc(docRef, {
-        isOnline: false
-      })
+      await updateDoc(doc(db, "users", currentUser.id), { isOnline: false });
     }
+    await signOut(auth);
     dispatch(handleCurrentUser(null));
     window.location.href = "/";
   };
-  const onEmojiClick = (emojiObject: EmojiClickData) => { return setInputMsg((prev) => prev + emojiObject.emoji) }
 
-  if (!currentUser) {
-    return <h2 style={{ padding: 20 }}>Please login first...</h2>;
-  }
+  const onEmojiClick = (emojiObject: EmojiClickData) =>
+    setInputMsg((prev) => prev + emojiObject.emoji);
+
+  if (!currentUser) return <h2>Please login first...</h2>;
 
   return (
     <div className="main-container">
       <header>
         <div className="logo">
-          <img src="/logo.png" alt="Company Logo" width="200" height="50" />
+          <img src="/logo.png" width="200" height="50" />
         </div>
 
         <div className="icons">
@@ -211,19 +223,18 @@ function Dashboard() {
           <MapsUgcIcon />
           <HomeIcon />
           <FavoriteBorderIcon />
-
           <img
-            src={currentUser.photoUrl || "/defaultImg.jpg"} alt="profile" width="40" height="40"
+            src={currentUser.photoUrl || "/defaultImg.jpg"}
+            width="40"
+            height="40"
             className="header-profile-img"
-            onClick={() => setShowProfileBox((prev) => !prev)}
-
+            onClick={() => setShowProfileBox(!showProfileBox)}
           />
-
           {showProfileBox && (
             <div className="profile-popup">
-              <p className="profile-name">
-                {currentUser.userName || currentUser.email}
-              </p>
+              <button className="profile-name" onClick={() => navigate("/EditProfile")}>
+                Profile
+              </button>
               <button className="logout-btn" onClick={handleLogout}>
                 Logout
               </button>
@@ -243,37 +254,48 @@ function Dashboard() {
               onChange={(e) => setSearchInput(e.target.value)}
             />
           </div>
-
-          <div className="users-list">
+          <div
+            className="users"
+            ref={usersRefDiv}
+            onScroll={handleScrollUsers}
+            style={{ overflowY: "auto", height: "calc(100vh - 140px)" }}
+          >
             <TableContainer component={Paper}>
               <Table>
                 <TableBody>
-                  {users ? (users.map((user) => (
-                    <TableRow
-                      key={user.id}
-                      sx={{ height: 70, cursor: "pointer" }}
-                      onClick={() => loadMessages(user)}
-                    >
-                      <TableCell sx={{ display: "flex", alignItems: "center" }}>
-                        <img
-                          src={user.photoUrl || "/defaultImg.jpg"}
-                          width="40"
-                          height="40"
-                          style={{
-                            borderRadius: "50%",
-                            marginRight: "20px",
-                          }}
-                        />
-                        {user.userName || user.email}
-                        {user.isOnline && <p>online</p>}
-                      </TableCell>
+                  {users.length > 0 ? (
+                    users.map((user) => (
+                      <TableRow
+                        key={user.id}
+                        sx={{ height: 70, cursor: "pointer" }}
+                        onClick={() => loadMessages(user)}
+                      >
+                        <TableCell sx={{ display: "flex", alignItems: "center" }}>
+                          <img
+                            src={user.photoUrl || "/defaultImg.jpg"}
+                            width="40"
+                            height="40"
+                            style={{ borderRadius: "50%", marginRight: "20px" }}
+                          />
+                          {user.userName || user.email}
+                          {user.isOnline && (
+                            <span style={{ color: "green", marginLeft: 10 }}>• online</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell>No users found</TableCell>
                     </TableRow>
-                  ))) : (
-                    <div>no user found</div>
                   )}
                 </TableBody>
               </Table>
             </TableContainer>
+
+            {usersLoading && (
+              <p style={{ textAlign: "center", padding: "10px" }}>Loading...</p>
+            )}
           </div>
         </div>
 
@@ -291,49 +313,65 @@ function Dashboard() {
               </div>
 
               <div className="chat-messages">
-                {messages.map((msg, index) => {
+                {messages.map((msg, idx) => {
                   const isMe = msg.sender === currentUser.id;
-                  // const options = { hour: '2-digit', minute: '2-digit' };
-                  // const time = new Date(msg.timestamp.seconds).toString()
-                  const dateObj = new Date(msg.timestamp.nanoseconds * 1000);
-                  let utcString = dateObj.toUTCString();
-                  let time = utcString.slice(-11, -4);
-                  console.log(msg.timestamp)
+                  let formatted = "";
+                  if (msg.timestamp) {
+                    const d = msg.timestamp.toDate?.() || new Date(msg.timestamp);
+                    formatted = d.toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    });
+                  }
                   return (
-                    <div
-                      key={index}
-                      className={`message-row ${isMe ? "me" : "them"}`}
-                    >
+                    <div key={idx} className={`message-row ${isMe ? "me" : "them"}`}>
                       <div className="message-bubble">
                         <span className="message-text">{msg.text}</span>
-                        <span className="message-time">
-                          {time}
-                        </span>
-
+                        <span className="message-time">{formatted}</span>
                       </div>
                     </div>
                   );
                 })}
               </div>
 
+              {isTyping && (
+                <div
+                  style={{
+                    fontStyle: "italic",
+                    color: "gray",
+                    marginLeft: 15,
+                    marginBottom: 5,
+                  }}
+                >
+                  {selectedUser.userName || selectedUser.email} is typing...
+                </div>
+              )}
+
               <div className="chat-input">
                 <button className="btn">
                   <img src="/add.png" width="35" />
                 </button>
+
                 <div className="emoji-section">
-                  {showPicker && <EmojiPicker onEmojiClick={onEmojiClick} />}
+                  {showPicker && (
+                    <div className="emoji-popup">
+                      <EmojiPicker onEmojiClick={onEmojiClick} />
+                    </div>
+                  )}
                 </div>
+
                 <button className="emoji-btn" onClick={() => setShowPicker(!showPicker)}>
                   <img src="/emoji.png" width="35" />
                 </button>
-
-
 
                 <input
                   type="text"
                   placeholder="Message..."
                   value={inputMsg}
-                  onChange={(e) => setInputMsg(e.target.value)}
+                  onChange={(e) => {
+                    setInputMsg(e.target.value);
+                    handleTyping();
+                  }}
                   onKeyDown={(e) => e.key === "Enter" && sendMessage()}
                 />
 

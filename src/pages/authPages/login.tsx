@@ -111,7 +111,7 @@ function Login() {
       );
       const existed = await getDocs(existingQuery);
 
-      if (!existed) {
+      if (existed.empty) {
         await setDoc(doc(db, "users", firebaseUser.uid), {
           id: firebaseUser.uid,
           userName: firebaseUser.displayName || null,
@@ -122,11 +122,13 @@ function Login() {
           isOnline: true
         });
       }
-      const ref = doc(db, "users", firebaseUser.uid)
+      if(!existed.empty){
+        const ref = doc(db, "users", firebaseUser.uid)
         await updateDoc(ref, {
           isOnline: true
         })
 
+      }
       dispatch(
         handleCurrentUser({
           id: firebaseUser.uid,
