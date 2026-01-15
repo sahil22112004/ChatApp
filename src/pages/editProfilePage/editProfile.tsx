@@ -11,6 +11,7 @@ import { handleCurrentUser } from "../../redux/slice/authSlice";
 import "./editProfile.css";
 import { useNavigate } from "react-router";
 
+
 const ProfileSchema = z.object({
   userName: z.string().min(3, "Username must be at least 3 characters"),
   email: z.string().email("Invalid email"),
@@ -59,10 +60,8 @@ function EditProfile() {
         })
       );
 
-      alert("Profile updated successfully!");
     } catch (e) {
       console.error(e);
-      alert("Something went wrong!");
     }
 
     setLoading(false);
